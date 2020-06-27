@@ -3,7 +3,7 @@ const Markup = require('telegraf/markup')
 const Extra = require('telegraf/extra')
 const Form = require('./Form')
 const { reverseGeocode } = require('../../util/geocode')
-const sendMail = require('../../util/sendMail')
+const { sendMail } = require('../../util/transporter')
 const { EMAIL_ADDRESS } = require('../../../config.json')
 const { logError } = require('../../util/log')
 
