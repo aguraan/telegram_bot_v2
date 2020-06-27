@@ -1,0 +1,29 @@
+{
+  "name": "telegram_bot_v2",
+  "version": "1.0.0",
+  "description": "\"telegram bot on telegraf.js\"",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index",
+    "dev": "nodemon index"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aguraan/telegram_bot_v2.git"
+  },
+  "author": "aguraan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/aguraan/telegram_bot_v2/issues"
+  },
+  "homepage": "https://github.com/aguraan/telegram_bot_v2#readme",
+  "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.1.2",
+    "axios": "^0.19.2",
+    "nodemailer": "^6.4.10",
+    "telegraf": "^3.38.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.4"
+  }
+}
