@@ -22,6 +22,7 @@ const kb = Markup
     .extra()
 
 start.enter(ctx => {
+    ctx.session.form = null
     ctx.reply('Чем могу помочь?', kb)
 })
 

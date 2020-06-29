@@ -1,7 +1,9 @@
+const fields = require('./fields')
+
 module.exports = class Form {
     constructor() {
-        this.name = '',
-        this.tel = '',
-        this.address = ''
+        Object.keys(fields).forEach(key => {
+            this[key] = ''
+        })
     }
 }

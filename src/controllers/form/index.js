@@ -1,42 +1,17 @@
 const Scene = require('telegraf/scenes/base')
 const Markup = require('telegraf/markup')
-const Extra = require('telegraf/extra')
 const Form = require('./Form')
-const { reverseGeocode } = require('../../util/geocode')
-const { sendMail } = require('../../util/transporter')
+const fields = require('./fields')
+const { FORM, START } = require('../../constants')
 const { EMAIL_ADDRESS } = require('../../../config.json')
-const { logError } = require('../../util/log')
+const { sendMail } = require('../../util/transporter')
+const { isFunction } = require('util')
 
-const { START, FORM } = require('../../constants')
 
-const buttons = {
-    send: '✉ Отправить',
-    edit: '✏ Изменить',
-    cancel: '🚫 Отменить'
-}
+const form = new Scene(FORM)
+const buttons = require('./buttons')
 
-const kb1 = Markup
-    .keyboard([
-        buttons.cancel
-    ])
-    .resize()
-    .extra()
-
-const kb2 = Extra.markup(markup => {
-    return markup.resize()
-        .keyboard([
-            markup.contactRequestButton('Отправить свой контакт'),
-            buttons.cancel
-        ])
-})
-const kb3 = Extra.markup(markup => {
-    return markup.resize()
-        .keyboard([
-            markup.locationRequestButton('Отправить своё местоположение'),
-            buttons.cancel
-        ])
-})
-const kb4 = Markup
+const kb = Markup
     .keyboard([
         buttons.send,
         buttons.edit,
@@ -45,43 +20,48 @@ const kb4 = Markup
     .resize()
     .extra()
 
-const labels = {
-    name: {
-        text: 'Введите имя человека, имеющего доступ на обьект:',
-        label: 'Имя',
-        keyboard: kb1
-    },
-    tel: {
-        text: 'Введите контактный номер телефона для связи:',
-        label: 'Контактный номер телефона',
-        keyboard: kb2
-    },
-    address: {
-        text: 'Введите адрес или отправьте местоположение, на котором необходимо сделать обмер:',
-        label: 'Адрес проведения обмера',
-        keyboard: kb3
-    }
-}
-
-const form = new Scene(FORM)
-
 form.enter(ctx => {
-    ctx.session.form = new Form()
-    askQuestion(ctx)
+
+    if (!ctx.session.form) {
+        ctx.session.form = new Form()
+    }
+
+    const { form } = ctx.session
+
+    for (const key in form) {
+        if (!form[key]) {
+            ctx.scene.enter(key)
+            return
+        }
+    }
+
+    const html = '<b>Ваша заявка сформирована:</b>\n\n' + 
+    
+    Object
+        .entries(form)
+        .map(([key, value]) => {
+            return `<b>- ${ fields[key].label }:</b> <i>${ value }</i>`
+        }).join('\n')
+
+    ctx.replyWithHTML(html, kb)
 })
 
-form.hears(buttons.cancel, ctx => ctx.scene.enter(START))
+form.hears(buttons.cancel, ctx => {
+    ctx.scene.enter(START)
+})
 
 form.hears(buttons.edit, ctx => {
     const { form } = ctx.session
 
     if (form) {
         const ikb = Markup.inlineKeyboard(
-            Object.entries(form).map(([key, value]) => {
-                return [ Markup.callbackButton(labels[key].label, key) ]
-            })
+            Object
+                .keys(form)
+                .map(key => {
+                    return [ Markup.callbackButton(fields[key].label, key) ]
+                })
         )
-        .extra()
+            .extra()
         ctx.reply('Что вы хотите изменить?', ikb)
     }
 })
@@ -91,18 +71,20 @@ form.hears(buttons.send, ctx => {
 
     const html = '<table>' +
     
-    Object.entries(form).map(([key, value]) => {
-        let out = value
-        if (key === 'tel') {
-            out = `<a href="tel:${ value }">${ value }</a>`
-        }
-        return `
-            <tr>
-                <td><strong>${ labels[key].label }:</strong></td>
-                <td><i>${ out }</i></td>
-            </tr>
-        `
-    }).join('') +
+    Object
+        .entries(form)
+        .map(([key, value]) => {
+            let out = value
+            if (key === 'tel') {
+                out = `<a href="tel:${ value }">${ value }</a>`
+            }
+            return `
+                <tr>
+                    <td><strong>${ fields[key].label }:</strong></td>
+                    <td><i>${ out }</i></td>
+                </tr>
+            `
+        }).join('') +
 
     '</table>'
 
@@ -125,89 +107,48 @@ form.hears(buttons.send, ctx => {
 
 form.on('callback_query', ctx => {
     const { data } = ctx.update.callback_query
-    const { form } = ctx.session
     
-    if (data) {
-        if (data in form) {
-            form[data] = ''
-            askQuestion(ctx)
-        }
-    } else {
-        ctx.reply('Ой, что-то пошло не так, попробуйте заново 🙁')
-    }
+    ctx.scene.enter(data)
 })
 
-form.on('contact', ctx => {
-    const { form } = ctx.session
+for (const key in fields) {
+    const field = fields[key]
+    field.scene = new Scene(key)
 
-    if (form && !form.tel) {
-        form.tel = ctx.update.message.contact.phone_number
-        askQuestion(ctx)
-    }
-})
+    field.scene.enter(ctx => {
+        ctx.reply(field.question, field.keyboard)
+    })
 
-form.on('location', ctx => {
-    const { form } = ctx.session
- 
-    if (form && !form.address) {
-        reverseGeocode(ctx.message.location)
-            .then(data => {
-                form.address = data.formatted_address
-                askQuestion(ctx)
-            })
-            .catch(logError)
-    }
-})
+    field.scene.hears(buttons.cancel, ctx => ctx.scene.enter(START))
 
-form.on('text', ctx => {
-    const { form } = ctx.session
+    if (field.handlers) {
 
-    for (const key in form) {
-        if (!form[key]) {
+        for (const handler in field.handlers) {
 
-            if (key === 'tel') {
-                const validNumber = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/i.test(ctx.message.text)
-                if (!validNumber) {
-                    ctx.reply('Это не телефонный номер')
-                    break
+            const middleware = field.handlers[handler]
+            
+            if ( isFunction(middleware) ) {
+                field.scene[handler](middleware.bind(field))
+            } else {
+                for (const listener in middleware) {
+
+                    if ( Array.isArray(middleware[listener]) ) {
+                        field.scene[handler](listener, ...middleware[listener].map(func => func.bind(field)))
+                    } else {
+                        field.scene[handler](listener, middleware[listener].bind(field))
+                    }
                 }
             }
-
-            form[key] = ctx.message.text.trim()
-            break
         }
     }
 
-    askQuestion(ctx)
-})
-
-module.exports = form
-
-function askQuestion(ctx) {
-    const { form } = ctx.session
-    if (form) {
-        for (const key in form) {
-            if (!form[key]) {
-                ctx.reply(labels[key].text, labels[key].keyboard)
-                break
-            }
-        }
-    }
-
-    printOrder(ctx)
+    field.scene.on('message', ctx => ctx.scene.reenter())
 }
 
-function printOrder(ctx) {
-    const { form } = ctx.session
+const scenes = Object
+    .values(fields)
+    .map(field => field.scene)
 
-    if (Object.values(form).every(item => !!item)) {
+scenes.push(form)
 
-        const html = '<b>Ваша заявка сформирована:</b>\n\n' + 
-        
-        Object.entries(form).map(([key, value]) => {
-            return `<b>- ${ labels[key].label }:</b> <i>${ value }</i>`
-        }).join('\n')
-
-        ctx.replyWithHTML(html, kb4)
-    }
-}
+module.exports = scenes

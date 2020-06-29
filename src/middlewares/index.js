@@ -8,7 +8,7 @@ const {
 const startScene = require('../controllers/start')
 const newOrderScene = require('../controllers/new_order')
 const infoScene = require('../controllers/info')
-const formScene = require('../controllers/form')
+const formScenes = require('../controllers/form')
 
 const composer = new Composer()
 
@@ -16,13 +16,13 @@ const stage = new Stage([
     startScene,
     newOrderScene,
     infoScene,
-    formScene
+    ...formScenes
 ])
 
 composer.use(session())
 composer.use(stage.middleware())
 
 composer.command('start', (ctx) => ctx.scene.enter(START))
-composer.on('message', (ctx) => ctx.reply('Выберите, что Вас интересует из меню'))
+composer.on('message', ctx => ctx.reply('Выберите, что Вас интересует из меню'))
 
 module.exports = composer
