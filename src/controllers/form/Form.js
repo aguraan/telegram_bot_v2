@@ -1,9 +1,7 @@
-const fields = require('./fields')
-
 module.exports = class Form {
-    constructor() {
+    constructor(fields) {
         Object.keys(fields).forEach(key => {
-            this[key] = ''
+            this[key] = fields[key].type()
         })
     }
 }

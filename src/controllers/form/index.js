@@ -2,10 +2,11 @@ const Scene = require('telegraf/scenes/base')
 const Markup = require('telegraf/markup')
 const Form = require('./Form')
 const fields = require('./fields')
-const { FORM, START } = require('../../constants')
+const { FORM, START, DOCUMENT, PHOTO, TEXT, URL } = require('../../constants')
 const { EMAIL_ADDRESS } = require('../../../config.json')
 const { sendMail } = require('../../util/transporter')
 const { isFunction } = require('util')
+const querystring = require('querystring')
 
 
 const form = new Scene(FORM)
@@ -23,25 +24,52 @@ const kb = Markup
 form.enter(ctx => {
 
     if (!ctx.session.form) {
-        ctx.session.form = new Form()
+        ctx.session.form = new Form(fields)
     }
 
     const { form } = ctx.session
 
     for (const key in form) {
-        if (!form[key]) {
+        let isEmpty = false
+
+        if (Array.isArray(form[key])) {
+            isEmpty = !form[key].length
+        } else {
+            isEmpty = !form[key]
+        }
+
+        if (isEmpty) {
             ctx.scene.enter(key)
             return
         }
     }
 
-    const html = '<b>Ваша заявка сформирована:</b>\n\n' + 
-    
-    Object
+    const content = Object
         .entries(form)
         .map(([key, value]) => {
+            if (key === 'files') {
+                return `<b>- ${ fields[key].label }:</b>\n\n` + [
+                    value
+                        .filter(obj => obj.type === TEXT)
+                        .map(obj => `<i>${ obj.text }</i>`)
+                        .join('\n\n'),
+                    value
+                        .filter(obj => obj.type === URL)
+                        .map(obj => `<a href="${ obj.url }">${ querystring.unescape(obj.url) }</a>`)
+                        .join('\n\n'),
+                    value
+                        .filter(obj => obj.type === DOCUMENT || obj.type === PHOTO)
+                        .map(obj => `<a href="${ obj.path }">[ ${ obj.filename } ]</a>`)
+                        .join(' '),
+                ]
+                    .filter(item => !!item)
+                    .join('\n\n')
+            }
             return `<b>- ${ fields[key].label }:</b> <i>${ value }</i>`
-        }).join('\n')
+        })
+        .join('\n')
+
+    const html = '<b>Ваша заявка сформирована:</b>\n\n' + content
 
     ctx.replyWithHTML(html, kb)
 })
@@ -69,9 +97,43 @@ form.hears(buttons.edit, ctx => {
 form.hears(buttons.send, ctx => {
     const { form } = ctx.session
 
-    const html = '<table>' +
+    const mailOptions = {
+        to: EMAIL_ADDRESS,
+        subject: `Заявка от ${ ctx.from.first_name } ${ ctx.from.last_name } | #${ ctx.from.id }`,
+    }
+
+    mailOptions.attachments = form.files.filter(file => file.type === DOCUMENT || file.type === PHOTO)
+
+    const embededImages = form.files
+        .filter(file => file.type === PHOTO)
+        .map(file => {
+            const figcaption = file.caption ? `<figcaption>${ file.caption }</figcaption>` : ''
+            const figure = `
+                <figure style="margin: 5px;">
+                    <img src="cid:${ file.cid }" alt="" width="200" />
+                    ${ figcaption }
+                </figure>`
+            return figure
+        })
+        .join('')
     
-    Object
+    const links = form.files
+        .filter(file => file.type === URL)
+        .map(file => {
+            return `<a href="${ file.url }">${ querystring.unescape(file.url) }</a>`
+        })
+        .join('')
+    
+    const text = form.files
+        .filter(file => file.type === TEXT)
+        .map(file => {
+            return `<p>${ file.text }</p>`
+        })
+        .join('')
+
+    delete form.files
+
+    const tableBody = Object
         .entries(form)
         .map(([key, value]) => {
             let out = value
@@ -84,17 +146,19 @@ form.hears(buttons.send, ctx => {
                     <td><i>${ out }</i></td>
                 </tr>
             `
-        }).join('') +
+        }).join('')
 
-    '</table>'
+    mailOptions.html = `
+        <table>${ tableBody }</table>
+        <br/>
+        ${ text ? `<div>${ text }</div><br/>` : '' }
+        ${ links ? `<div style="display: flex; flex-direction: column;">${ links }</div><br/>` : '' }
+        ${ embededImages ? `<div style="display: flex;">${ embededImages }</div>` : '' }
+    `
 
     ctx.reply('⏳ Отправляю...')
     
-    sendMail({
-        to: EMAIL_ADDRESS,
-        subject: `Заявка от ${ ctx.from.first_name } ${ ctx.from.last_name } | #${ ctx.from.id }`,
-        html
-    })
+    sendMail(mailOptions)
         .then(() => {
             ctx.reply('✅ Заявка успешно отправлена.')
             ctx.scene.enter(START)
