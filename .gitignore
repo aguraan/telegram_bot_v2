@@ -1,6 +1,9 @@
 .DS_Store
-node_modules
-config.json
+bot_app/node_modules
+bot_app/config.json
+mongo-rs0-1/data/
+mongo-rs0-2/data/
+mongo-rs0-3/data/
 
 # local env files
 .env
