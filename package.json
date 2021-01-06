@@ -19,7 +19,7 @@
   "homepage": "https://github.com/aguraan/telegram_bot_v2#readme",
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.1.2",
-    "axios": "^0.19.2",
+    "axios": "^0.21.1",
     "nodemailer": "^6.4.10",
     "telegraf": "^3.38.0"
   },
