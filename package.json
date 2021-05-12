@@ -20,7 +20,7 @@
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.1.2",
     "axios": "^0.19.2",
-    "nodemailer": "^6.4.10",
+    "nodemailer": "^6.4.16",
     "telegraf": "^3.38.0"
   },
   "devDependencies": {
